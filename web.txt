@@ -1,0 +1,91 @@
+//
+// программа для управления 
+// сервомашинками мини-web-cam-бота
+// 
+// robocraft.ru
+
+#include<opencv2/opencv.hpp>
+#include <opencv2/highgui.hpp>
+#include <stdlib.h>
+#include <stdio.h>
+
+#include "serial.h"
+using namespace cv;
+Serial sg; // для работы с COM-портом
+
+		   // положение 1-й сервы
+int A = 0;
+int Amax = 180;
+
+// положение 2-й сервы
+int F = 0;
+int Fmax = 180;
+
+IplImage* dest = 0;
+
+//
+// функции-обработчики ползунков
+//
+void myTrackbarA(int pos) {
+	A = pos;
+	// Firmata
+	char buf[3];
+	buf[0] = 0xE0 | 7;
+	buf[1] = A & 0x7F;
+	buf[2] = (A >> 7) & 0x7F;
+	sg.Send(buf, 3);
+	Sleep(100);
+}
+
+void myTrackbarF(int pos) {
+	F = pos;
+	// Firmata
+	char buf[3];
+	buf[0] = 0xE0 | 8;
+	buf[1] = F & 0x7F;
+	buf[2] = (F >> 7) & 0x7F;
+	sg.Send(buf, 3);
+	Sleep(100);
+
+}
+
+int main(int argc, char* argv[])
+{
+	// получаем любую подключённую камеру
+	VideoCapture cap(2); // open the default camera
+	if (!cap.isOpened())  // check if we succeeded
+		return -1;
+
+	Mat edges;
+	namedWindow("edges", 1);
+
+	// инициализация COM-порта
+	int port = 3; // номер виртуального COM-порта Arduino
+	printf("[i] try to open COM-port %d\n", port);
+	bool b = sg.Open(port, 9600);
+	if (!b)
+	{
+		printf("[!] Error open COM-port!\n");
+		return 1;
+	}
+	printf("[i] ok\n");
+
+	// добавляем ползунки для управления положением сервомашинок
+	cvCreateTrackbar("A", "edges", &A, Amax, myTrackbarA);
+	cvCreateTrackbar("F", "edges", &F, Fmax, myTrackbarF);
+
+	// цикл обработки кадров с камеры
+	for (;;)
+	{
+		Mat frame;
+		cap >> frame; // get a new frame from camera
+		cvtColor(frame, edges, CV_BGR2HSV);
+		
+		GaussianBlur(edges, edges, Size(7, 7), 1.5, 1.5);
+		/*Canny(edges, edges, 0, 30, 3);*/
+		imshow("edges", edges);
+		if (waitKey(30) >= 0) break;
+	}
+	
+	return 0;
+}

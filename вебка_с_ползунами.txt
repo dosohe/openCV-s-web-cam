@@ -1,0 +1,158 @@
+//
+// программа для управления 
+// сервомашинками мини-web-cam-бота
+// 
+// robocraft.ru
+
+#include<opencv2/opencv.hpp>
+#include <opencv2/highgui.hpp>
+#include <stdlib.h>
+#include <stdio.h>
+
+#include "serial.h"
+using namespace cv;
+Serial sg; // для работы с COM-портом
+
+		   // положение 1-й сервы
+int A = 0;
+int Amax = 180;
+
+// положение 2-й сервы
+int F = 0;
+int Fmax = 180;
+
+IplImage* dest = 0;
+
+//
+// функции-обработчики ползунков
+//
+void myTrackbarA(int pos) {
+	A = pos;
+	// Firmata
+	char buf[3];
+	buf[0] = 0xE0 | 7;
+	buf[1] = A & 0x7F;
+	buf[2] = (A >> 7) & 0x7F;
+	sg.Send(buf, 3);
+	Sleep(100);
+}
+
+void myTrackbarF(int pos) {
+	F = pos;
+	// Firmata
+	char buf[3];
+	buf[0] = 0xE0 | 8;
+	buf[1] = F & 0x7F;
+	buf[2] = (F >> 7) & 0x7F;
+	sg.Send(buf, 3);
+	Sleep(100);
+
+}
+
+// функция поворота изображения на заданный угол
+//void rotate(IplImage* _image, double _angle = 90)
+//{
+//	// матрицы трансформации
+//	CvMat* rot_mat = cvCreateMat(2, 3, CV_32FC1);
+//	// вращение относительно центра изображения
+//	CvPoint2D32f center = cvPoint2D32f(_image->width / 2, _image->height / 2);
+//	double angle = _angle;
+//	double scale = 1;
+//	cv2DRotationMatrix(center, angle, scale, rot_mat);
+//
+//	IplImage* Temp = 0;
+//	Temp = cvCreateImage(cvSize(_image->width, _image->height), _image->depth, _image->nChannels);
+//
+//	// выполняем вращение
+//	cvWarpAffine(_image, Temp, rot_mat);
+//
+//	// сохраняем результат
+//	cvCopy(Temp, _image);
+//
+//	cvReleaseImage(&Temp);
+//	cvReleaseMat(&rot_mat);
+//}
+
+int main(int argc, char* argv[])
+{
+	// получаем любую подключённую камеру
+	VideoCapture cap(0); // open the default camera
+	if (!cap.isOpened())  // check if we succeeded
+		return -1;
+
+	Mat edges;
+	namedWindow("edges", 1);
+
+
+	//IplImage* frame = 0;
+
+	//// окно для вывода изображения
+	//cvNamedWindow("capture", CV_WINDOW_AUTOSIZE);
+
+	// инициализация COM-порта
+	int port = 3; // номер виртуального COM-порта Arduino
+	printf("[i] try to open COM-port %d\n", port);
+	bool b = sg.Open(port, 9600);
+	if (!b)
+	{
+		printf("[!] Error open COM-port!\n");
+		return 1;
+	}
+	printf("[i] ok\n");
+
+	// добавляем ползунки для управления положением сервомашинок
+	cvCreateTrackbar("A", "edges", &A, Amax, myTrackbarA);
+	cvCreateTrackbar("F", "edges", &F, Fmax, myTrackbarF);
+
+	// цикл обработки кадров с камеры
+	for (;;)
+	{
+		Mat frame;
+		cap >> frame; // get a new frame from camera
+		cvtColor(frame, edges, 6);
+		GaussianBlur(edges, edges, Size(7, 7), 1.5, 1.5);
+		Canny(edges, edges, 0, 30, 3);
+		imshow("edges", edges);
+		if (waitKey(30) >= 0) break;
+	}
+	
+	/* освобождаем ресурсы
+	sg.Close();
+	cvReleaseCapture(&capture);
+	cvDestroyWindow("capture");*/
+	return 0;
+}
+
+
+ардуино 
+#include <Firmata.h>
+#include <Servo.h>
+
+Servo servo7;
+Servo servo8;
+
+void analogWriteCallback(byte pin, int value)
+{
+    if(pin == 7)
+      servo7.write(value);
+    if(pin == 8)
+      servo8.write(value);
+}
+
+void setup() 
+{
+    Firmata.setFirmwareVersion(0, 2);
+    Firmata.attach(ANALOG_MESSAGE, analogWriteCallback);
+
+    servo7.attach(7);
+    servo8.attach(8);
+   
+    Firmata.begin(9600);
+}
+
+void loop() 
+{
+    while(Firmata.available())
+        Firmata.processInput();
+}
+
